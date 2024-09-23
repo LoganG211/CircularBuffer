@@ -1,0 +1,136 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include "../LoganLibrary.h"
+#include "pthread.h"
+#include <CUnit/CUnit.h>
+#include <CUnit/Basic.h>
+#include <bits/pthreadtypes.h>
+
+// Clang format // A-style
+
+#define THREAD_COUNT 2
+
+uint32_t input_value = 0;
+pthread_barrier_t barrier;
+
+pthread_mutex_t push_lock;
+pthread_mutex_t pop_lock;
+
+cb_t cb = {
+    .write_idx = 1,
+    .read_idx = 1,
+};
+
+void *Push(void *arg){
+    long tid;
+    tid = (long)arg;
+
+    while( !cb_is_full(&cb) ){
+        
+        usleep(tid+500000);
+
+        // uint32_t input_value = (uint32_t)(rand());
+        uint32_t input_value = (uint32_t)(tid);
+        pthread_mutex_lock(&push_lock);
+        printf("    th-%ld, val-%d\n", tid, input_value);
+
+        cb_push(&cb, input_value);
+        cb_dump(&cb);
+        pthread_mutex_unlock(&push_lock);
+
+        printf("\n");
+    }
+    pthread_barrier_wait(&barrier); //wait for all threads
+
+    printf("\nThread %ld: Beginning POPing\n", tid);
+
+    uint32_t temp = 0;
+    while( !cb_is_empty(&cb) ){
+        usleep(tid+500000);
+        
+        pthread_mutex_lock(&pop_lock);
+        printf("    Outside - read_idx: %d\n", cb.read_idx);
+        cb_dump(&cb); // First thread no problem
+        cb_pop(&cb, &temp); //problem thread 2
+        printf("    POP: %d\n", temp);
+        cb_dump(&cb); // Doesn't work - stalling - thread 1 fix
+        printf("\n");
+        pthread_mutex_unlock(&pop_lock);
+    }
+    pthread_exit(NULL);
+}
+
+void test_threads(){
+    pthread_t threads[THREAD_COUNT];
+    cb_init(&cb);
+    pthread_mutex_init(&push_lock, NULL);
+    pthread_barrier_init(&barrier, NULL, THREAD_COUNT);
+    pthread_mutex_init(&pop_lock, NULL);
+
+    // int rc;
+    for(long i=0; i<THREAD_COUNT; i++){
+        printf("\nIn main: creating thread %ld\n", i);
+        pthread_create(&threads[i], NULL, Push, (void *)i);
+
+        // if (rc){
+        //     printf("ERROR; return code from pthread_create() is %d\n", rc);
+        //     exit(-1);
+        // }
+    }
+    printf("\n");
+    for(int i=0; i<THREAD_COUNT; i++){
+        pthread_join(threads[i], NULL);
+    }
+    // pthread_mutex_destroy(&lock);
+    pthread_barrier_destroy(&barrier);
+    pthread_mutex_destroy(&push_lock);
+    pthread_mutex_destroy(&pop_lock);
+    // pthread_exit(NULL);
+    printf("-------------------------------------------------------------\n\n");
+}
+
+void main(){
+    CU_initialize_registry();
+    CU_pSuite suite = CU_add_suite("add_test_suite", 0, 0);
+
+    CU_add_test(suite, "test_threads", test_threads);
+
+    CU_basic_set_mode(CU_BRM_VERBOSE);
+    CU_basic_run_tests();
+    CU_cleanup_registry();
+    // for(long i=0; i<cb_size; i++){
+    // printf("In main: creating thread %ld\n", i);
+        // rc = pthread_create(&threads[i], NULL, Push, (void *)i);
+
+        // input_value = (uint32_t)(rand());
+        // printf("    %ld, %d\n", i, input_value);
+    // cb_pop(circularBuffer, &write_idx, &read_idx);
+    // cb_dump(circularBuffer, &write_idx, &read_idx);
+    // printf("\n");
+
+        // if (rc){
+        //     printf("ERROR; return code from pthread_create() is %d\n", rc);
+        //     exit(-1);
+        // }
+    // }
+    // pthread_exit(NULL);
+
+    // Single-thread example
+    // cb_push(circularBuffer, &write_idx, &read_idx, input_value); // Works
+    // cb_push(circularBuffer, &write_idx, &read_idx, input_value);
+    // cb_dump(circularBuffer, &write_idx, &read_idx); // Works
+
+    // Multi-thread example
+    // pthread_t threads[cb_size];
+    // int rc;
+    // for(long i=0; i<cb_size; i++){
+    //     printf("In main: creating thread %ld\n", i);
+    //     rc = pthread_create(&threads[i], NULL, NULL, (void *)i);
+    //     if (rc){
+    //         printf("ERROR; return code from pthread_create() is %d\n", rc);
+    //         exit(-1);
+    //     }
+    // }
+    // pthread_exit(NULL);
+}

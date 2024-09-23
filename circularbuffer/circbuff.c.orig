@@ -1,0 +1,116 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include "circbuff.h"
+#include <pthread.h>
+
+#define debug 0
+
+int cb_is_full(cb_t *cb){
+    if( (((cb->write_idx - cb->read_idx) + cb_size) % cb_size) != (cb_size-1)){ // if there is available space
+        return 0;
+    } else {
+        return 1;
+    }
+};
+
+int cb_is_empty(cb_t *cb){
+    if( (((cb->write_idx - cb->read_idx) + cb_size) % cb_size) != 0 ){
+        return 0;
+    } else {
+        return 1;
+    }
+}
+
+void cb_init(cb_t * cb){
+    cb->write_idx = 0;
+    cb->read_idx = 0;
+    pthread_mutex_init(&cb->lock, 0);
+};
+
+void cb_increment(uint8_t *ptr){
+    *ptr = (*ptr+1) % cb_size;
+};
+
+// Inserts an element with given value into the buffer
+int cb_push(cb_t *cb, uint32_t val){
+    pthread_mutex_lock(&cb->lock);
+    if( !cb_is_full(cb) ){ // if there is available space
+        if(cb->write_idx == cb->read_idx && cb->Buffer[cb->write_idx] == 0){ // if it is the first element and empty
+            cb->Buffer[cb->write_idx] = val;
+            cb_increment(&cb->write_idx);
+        } else {
+            if((cb->write_idx+1) % cb_size != cb->read_idx){
+                cb->Buffer[cb->write_idx] = val;
+                cb_increment(&cb->write_idx);
+            }
+        }
+#if debug
+    printf("Read_idx: %d\n", cb->read_idx);
+    printf("Write_idx: %d\n", cb->write_idx);
+    printf("    Value: %d\n", val);
+    printf("        Long Size: %d\n", (((cb->write_idx - cb->read_idx) + cb_size) % cb_size));
+#endif
+    } else {
+        printf("There is no more space! POP to create space!\n");
+    }
+    pthread_mutex_unlock(&cb->lock);
+}
+
+// Pops the foremost element in the buffer.
+int cb_pop(cb_t * cb, uint32_t * data){
+    printf("        POP - prelock - GOT HERE!\n");
+    pthread_mutex_lock(&cb->lock);
+    printf("        POP - lock - GOT HERE!\n");
+    int rv;
+    if( !cb_is_empty(cb) ){ // if there is actual value
+        printf("        Says that it has actual value\n");
+        *data = cb->Buffer[((cb_size + (cb->read_idx)) % cb_size)];
+        printf("        Have determined the return value\n");
+        cb->Buffer[cb->read_idx] = 0;
+        printf("        Set the position to 0\n");
+        cb_increment(&cb->read_idx);
+        printf("        POP - read_idx: %d\n", cb->read_idx);
+        // cb->read_idx = (cb->read_idx+1) % cb_size;
+        rv = 0; //0 is success
+    } else {
+        printf("The buffer is empty!\n");
+        rv = -1;
+    }
+    pthread_mutex_unlock(&cb->lock);
+    return rv;
+}
+
+// Returns the number of elements in the buffer
+int cb_get_count(cb_t * cb){
+    printf("            Got into the count\n");
+    // pthread_mutex_lock(&cb->lock); //problem here
+    // printf("        count - GOT HERE\n");
+    int rv = ((cb->write_idx - cb->read_idx) + cb_size) % cb_size;
+    printf("            rv: %d\n", rv);
+    // pthread_mutex_unlock(&cb->lock);
+    return rv;
+}
+
+// Removes all the elements in the circular buffer
+void cb_empty(cb_t * cb){
+    cb->read_idx = cb->write_idx;
+    // int size = cb_get_count(cb);
+    // for(int i=0; i<size; i++){
+    //     uint32_t temp;
+    //     cb_pop(cb, &temp);
+    // }
+}
+
+// Prints all the elements in the circular buffer
+void cb_dump(cb_t * cb){
+    int count = cb_get_count(cb); //Problem here in 2nd iteration of 1st thread
+    printf("        count: %d\n", count);
+    // pthread_mutex_lock(&cb->lock);
+    printf("        dump - GOT HERE\n");
+    for(int i=0; i<count; i++){
+        printf("%i ", cb->Buffer[((cb->read_idx+i) % cb_size)]);
+    }
+    printf("\n");
+    // pthread_mutex_unlock(&cb->lock);
+}

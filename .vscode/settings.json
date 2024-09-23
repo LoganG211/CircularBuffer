@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "stdint.h": "c",
+        "stdio.h": "c",
+        "type_traits": "c",
+        "circbuff.h": "c",
+        "pthread.h": "c",
+        "stdlib.h": "c"
+    },
+    "terminal.integrated.shell.windows": "C:\\Windows\\System32\\wsl.exe"
+}
